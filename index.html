@@ -450,6 +450,8 @@ async function cargarSheet(){
       ok=true;
     }catch(e){console.warn('proyectos:',e);}
   }
+
+  if(URL_ACUMULADO){
     try{
       const rows=parseCSV(await(await fetch(URL_ACUMULADO+'&t='+Date.now())).text());
       const MC=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
