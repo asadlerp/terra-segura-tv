@@ -378,6 +378,8 @@ let FRASES = [
 ];
 let fraseIdx = Math.floor(Math.random() * FRASES.length);
 
+const MESES_ES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
 // ── CSV parser ──
 function parseCSV(text){
   return text.trim().split('\n').slice(1)
@@ -403,13 +405,51 @@ async function cargarSheet(){
   if(URL_BROKERS){
     try{
       const rows=parseCSV(await(await fetch(URL_BROKERS+'&t='+Date.now())).text());
-      BROKERS=rows.map(c=>({name:c[0],meta:num(c[1]),ventas:num(c[2]),reservas:num(c[3]),
-        visitas:num(c[4]),ant:num(c[5]),contado:num(c[6]),credito:num(c[7])}));
+      const BROKERS_NOMBRES=['Andrea','Alonso','Dassna','Francisco','Nicole','Externo'];
+      // Detectar mes activo (mes actual en español)
+      const mesActual = new Date().toLocaleDateString('es-CL',{month:'long'});
+      const mesCapital = mesActual.charAt(0).toUpperCase()+mesActual.slice(1);
+      // Filtrar solo filas del mes actual que sean brokers (no totales)
+      let enMes = false;
+      const brokerRows = [];
+      for(const r of rows){
+        const col0 = r[0]||'';
+        const col1 = r[1]||'';
+        // Detectar inicio del bloque del mes actual
+        if(col0.toLowerCase() === mesActual.toLowerCase()) enMes = true;
+        // Detectar inicio del siguiente mes (terminar bloque)
+        if(enMes && col0 && col0!==mesCapital && MESES_ES.some(m=>col0.toLowerCase()===m.toLowerCase())) { enMes = false; }
+        // Solo filas de brokers reales dentro del mes activo
+        if(enMes && BROKERS_NOMBRES.some(n=>col1===n)){
+          brokerRows.push(r);
+        }
+      }
+      if(brokerRows.length>0){
+        BROKERS=brokerRows.map(c=>({name:c[1],meta:num(c[2]),ventas:num(c[3]),
+          reservas:num(c[4]),visitas:num(c[5]),ant:num(c[6]),contado:num(c[7]),credito:num(c[8])}));
+      }
       ok=true;
     }catch(e){console.warn('brokers:',e);}
   }
 
-  if(URL_ACUMULADO){
+  if(URL_PROYECTOS){
+    try{
+      const rows=parseCSV(await(await fetch(URL_PROYECTOS+'&t='+Date.now())).text());
+      const mesActual=new Date().toLocaleDateString('es-CL',{month:'long'});
+      let enMes=false;
+      const proyRows=[];
+      for(const r of rows){
+        const col0=(r[0]||'').trim();
+        const col1=(r[1]||'').trim();
+        if(col0.toLowerCase()===mesActual.toLowerCase()) enMes=true;
+        else if(enMes && col0 && MESES_ES.some(m=>col0.toLowerCase()===m.toLowerCase())) enMes=false;
+        // fila de proyecto: col0 vacía y col1 tiene el nombre, o col0 tiene el nombre
+        if(enMes && (col1.toUpperCase()===col1 && col1.length>3)) proyRows.push(r);
+      }
+      if(proyRows.length>0) actualizarTablaProyectos(proyRows);
+      ok=true;
+    }catch(e){console.warn('proyectos:',e);}
+  }
     try{
       const rows=parseCSV(await(await fetch(URL_ACUMULADO+'&t='+Date.now())).text());
       const MC=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -610,6 +650,37 @@ function renderTicker(){
     'Quedan <b>'+d+' días</b> para cerrar el mes 🔥',
   ];
   document.getElementById('ticker2').innerHTML=[...items,...items].map(t=>'<div class="ticker-item">'+t+'</div>').join('');
+}
+
+function actualizarTablaProyectos(rows){
+  // cols: 0=mes, 1=proyecto, 2=p.lista, 3=p.contado, 4=p.credito, 5=cuotas, 6=reserva, 7=promo, 8=disponibilidad
+  const ptRows=document.querySelectorAll('#s0 .pt-body .pt-row');
+  rows.forEach((cols,i)=>{
+    if(!ptRows[i]) return;
+    // Promoción (col 7)
+    const promoEl=ptRows[i].querySelector('.promo-badge');
+    const noneEl=ptRows[i].querySelectorAll('.c-none');
+    const promo=(cols[7]||'').trim();
+    if(promoEl){
+      if(promo && promo!=='—') promoEl.textContent='✦ '+promo;
+      else promoEl.textContent='—';
+    }
+    // Disponibilidad (col 8)
+    const dispEl=ptRows[i].querySelector('.disp');
+    if(dispEl){
+      const disp=(cols[8]||'').trim();
+      if(disp && disp!=='—'){
+        const parts=disp.split('/');
+        dispEl.innerHTML=parts[0]+(parts[1]?'<span class="disp-total">/'+parts[1]+'</span>':'');
+      }
+    }
+    // Precio Lista (col 2)
+    const listaEl=ptRows[i].querySelector('.price-lista');
+    if(listaEl && cols[2]) listaEl.textContent=cols[2];
+    // Precio Contado (col 3)
+    const contEl=ptRows[i].querySelector('.price-main');
+    if(contEl && cols[3]) contEl.textContent=cols[3];
+  });
 }
 
 function lanzarConfetti(){
